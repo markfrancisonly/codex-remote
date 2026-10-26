@@ -1,0 +1,7 @@
+# runtime state & secrets: NEVER tracked (credentials live in data/)
+data/
+.env
+# host-specific additions, merged by compose
+compose.override.yaml
+NOTES.local.md
+__pycache__/

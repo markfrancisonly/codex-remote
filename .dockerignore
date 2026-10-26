@@ -1,0 +1,7 @@
+# The build context is the whole stack dir; data/ holds the live ChatGPT
+# credential, the sqlite state and (with CODEX_AUTO_UPDATE=1) a ~324MB
+# release tree. The Dockerfile uses none of it.
+data/
+*.md
+.env
+.env.example

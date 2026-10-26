@@ -1,0 +1,125 @@
+name: codex
+
+services:
+  codex:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-latest}
+    # Pulled from GHCR (README "The image"); ./build.sh builds it locally.
+    image: ghcr.io/markfrancisonly/codex-remote:${DOCKER_CODEX_IMAGE_TAG:-latest}
+    container_name: codex
+    restart: always
+    # Reaps the app-server if it is ever orphaned: a zombie child keeps
+    # answering `kill -0`, which would fake liveness.
+    init: true
+    # The app-server handles SIGTERM and drains; idle stop is ~250ms, but a
+    # turn driven from the phone can be mid-command.
+    stop_grace_period: 70s
+    # The device name shown in the ChatGPT app IS the hostname — there is no
+    # flag or env var to override it. Changing this renames the host.
+    hostname: ${CODEX_DEVICE_NAME:-codex-docker}
+    # Fence for the upstream git-fork storm (openai/codex#43256).
+    pids_limit: 8192
+
+    # Run as root by design. This is a Docker management agent: Codex drives
+    # the host Docker daemon via the mounted socket, manages containers that
+    # run as root, and works in /docker (root-owned on the host).
+    # SECURITY: socket access == root on the host. Only expose to trusted use.
+    user: "0:0"
+
+    environment:
+      HOME: /root
+      TZ: ${CODEX_TZ:-${TZ:-UTC}}
+      DOCKER_HOST: unix:///var/run/docker.sock
+      WORKSPACE_DIR: /docker
+      CODEX_HOME: /root/.codex
+
+      # Without this the app-server logs ONLY errors — every reconnect,
+      # enrollment and auth event is invisible in `docker logs`.
+      RUST_LOG: ${CODEX_RUST_LOG:-info}
+
+      # --- git identity (the global gitconfig is not persisted) ---
+      GIT_USER_NAME: ${CODEX_GIT_USER_NAME:-}
+      GIT_USER_EMAIL: ${CODEX_GIT_USER_EMAIL:-}
+
+      # --- session behaviour, seeded into config.toml on FIRST boot only ---
+      # danger-full-access is the only sandbox that works in a container:
+      # bubblewrap needs unprivileged user namespaces, which Docker does not
+      # grant, so read-only/workspace-write fail every command (and cannot
+      # reach the Docker socket even with writable_roots).
+      CODEX_SANDBOX_MODE: ${CODEX_SANDBOX_MODE:-danger-full-access}
+      # on-request = Codex asks and your phone approves; never = autonomous.
+      CODEX_APPROVAL_POLICY: ${CODEX_APPROVAL_POLICY:-on-request}
+
+      # --- auth ---
+      # 1 = run the device-code flow automatically and print/push the code.
+      CODEX_DEVICE_LOGIN: ${CODEX_DEVICE_LOGIN:-1}
+      # Unattended 15-minute device-code flows to run back to back (each
+      # polls OpenAI every 5s) before parking and waiting for codex-login.
+      # 0 = never park.
+      CODEX_DEVICE_LOGIN_CYCLES: ${CODEX_DEVICE_LOGIN_CYCLES:-4}
+
+      # --- supervision ---
+      # Seconds between remoteControl/status/read probes.
+      CODEX_PROBE_INTERVAL: ${CODEX_PROBE_INTERVAL:-30}
+      # Seconds the bridge may stay broken before the container reports
+      # unhealthy (the app-server retries on its own with a 30s-capped
+      # sawtooth, so short outages are normal).
+      CODEX_BRIDGE_GRACE: ${CODEX_BRIDGE_GRACE:-300}
+      # Minutes of a stuck bridge (with healthy auth) before bouncing the
+      # app-server once. 0 disables.
+      CODEX_BRIDGE_RESTART_MINUTES: ${CODEX_BRIDGE_RESTART_MINUTES:-30}
+      # URL probed (any HTTP response counts) before (re)launching.
+      # These four are read with CODEX_-prefixed names ON PURPOSE: compose
+      # interpolates from the environment of whatever invokes it, and the
+      # claude hub exports NETWORK_PROBE_URL / RECONNECT_BACKOFF_* /
+      # HOST_STACK_DIR into its own container. Deploying this stack from a hub
+      # session silently pointed the network probe at api.anthropic.com and
+      # the recreate handoff at /docker/claude.
+      NETWORK_PROBE_URL: ${CODEX_NETWORK_PROBE_URL:-https://chatgpt.com}
+      RECONNECT_BACKOFF_MIN: ${CODEX_RECONNECT_BACKOFF_MIN:-5}
+      RECONNECT_BACKOFF_MAX: ${CODEX_RECONNECT_BACKOFF_MAX:-180}
+      # Seconds a graceful drain may take before the supervisor SIGKILLs it.
+      CODEX_RESTART_KILL_TIMEOUT: ${CODEX_RESTART_KILL_TIMEOUT:-90}
+
+      # --- updates ---
+      CODEX_UPDATE_INTERVAL_HOURS: ${CODEX_UPDATE_INTERVAL_HOURS:-12}
+      # 0 = only report new releases (rebuild the image to take them);
+      # 1 = install into the persisted volume and bounce the app-server.
+      CODEX_AUTO_UPDATE: ${CODEX_AUTO_UPDATE:-0}
+
+      # --- alerts ---
+      NOTIFY_URL: ${CODEX_NOTIFY_URL:-}
+      NOTIFY_FORMAT: ${CODEX_NOTIFY_FORMAT:-text}
+      LOG_LEVEL: ${CODEX_LOG_LEVEL:-info}
+
+      # Host-side path of this stack. Hardcoded, not interpolated: nothing
+      # legitimately overrides it, and the name is not ours alone (see above).
+      HOST_STACK_DIR: /docker/codex
+
+    volumes:
+      # Codex state: auth.json, installation_id, config.toml, the sqlite
+      # databases (state_5.sqlite holds the remote_control_enrollments row).
+      # Losing this directory means re-pairing every phone.
+      - ./data/codex:/root/.codex
+      # All container stacks / git repos on the host. Add more mounts in a
+      # compose.override.yaml (gitignored; compose merges it automatically).
+      - /docker:/docker
+      # Full control of the host Docker daemon.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/localtime:/etc/localtime:ro
+
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 180s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
