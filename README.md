@@ -285,9 +285,12 @@ ones are pruned).
 
 ## The image
 
-CI publishes the image to the GitHub Container Registry for linux/amd64 and
-linux/arm64, built against the newest Codex release, once the script checks,
-the build-time schema assertion and a smoke test of the built image pass:
+CI publishes the image to the GitHub Container Registry for **linux/amd64**
+(x86-64) and **linux/arm64** (AArch64). Each architecture is built and
+smoke-tested on a native runner using the same resolved Codex release.
+Shared tags are published only after both builds pass the remote-control
+schema assertion and smoke checks for the CPU architecture, Codex version,
+Docker CLI and plugins, Git, Node.js, Python, SQLite and helper scripts:
 
 | Tag | Points at |
 |---|---|
@@ -296,7 +299,14 @@ the build-time schema assertion and a smoke test of the built image pass:
 | `1.2.3`, `1.2`, `1` | the release tag `v1.2.3` |
 
 `compose.yaml` pulls `ghcr.io/markfrancisonly/codex-remote`, tagged by
-`DOCKER_CODEX_IMAGE_TAG` in `.env` (default `latest`).
+`DOCKER_CODEX_IMAGE_TAG` in `.env` (default `latest`). Docker automatically
+selects the matching architecture, so ARM64 hosts use the same Compose file
+and tags without a `platform` override. A 64-bit OS is required; 32-bit ARM
+(`arm/v7`) is not supported.
+
+For local builds, run `./build.sh` on either supported architecture. Ubuntu
+packages and the standalone Codex installer select the matching binaries;
+the schema assertion runs for that architecture before the image is ready.
 
 ## Applying config changes from inside a session
 
