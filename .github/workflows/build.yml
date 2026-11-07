@@ -19,6 +19,7 @@ on:
       - .dockerignore
       - "*.sh"
       - codex-rc-status.py
+      - tests/**
       - compose.yaml
       - .github/workflows/build.yml
   pull_request:
@@ -42,8 +43,12 @@ jobs:
 
       - name: Check scripts
         run: |
-          for f in *.sh; do bash -n "$f"; done
+          for f in *.sh tests/*.sh; do bash -n "$f"; done
           python3 -m py_compile codex-rc-status.py
+
+      - name: Run offline regression tests
+        run: |
+          for t in tests/*.sh; do bash "$t"; done
 
       # Same resolution as build.sh: with CODEX_VERSION=latest the install
       # layer's cache key never moves, so pass the real release. Resolve once

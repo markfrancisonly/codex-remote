@@ -351,6 +351,19 @@ recreate handoff at `/docker/claude`.
 
 ## Contributing
 
+Offline regression checks exercise supervisor recovery, health reporting, and
+container recreation using a fake CLI, mocked Docker, and temporary state.
+They require Bash, Python 3, jq, and standard Linux utilities; no account,
+network connection, or running containers are needed.
+
+```bash
+for t in tests/*.sh; do bash "$t"; done
+```
+
+CI runs these checks before building either architecture. Git keeps Linux
+line endings on every platform, and Docker excludes development files from
+the image build context.
+
 See [HUMAN_POLICY.md](HUMAN_POLICY.md).
 
 ## License
