@@ -5,3 +5,9 @@ data/
 *.md
 .env
 .env.example
+# Development files are not needed by the runtime image.
+.git/
+.github/
+tests/
+__pycache__/
+*.pyc
