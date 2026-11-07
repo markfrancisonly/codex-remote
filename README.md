@@ -349,6 +349,10 @@ recreate handoff at `/docker/claude`.
   documented cap; the supervisor bounds only its own `/run/codex/codex.log`.
   Worth a glance if the stack directory ever looks large.
 
+## Contributing
+
+See [HUMAN_POLICY.md](HUMAN_POLICY.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
